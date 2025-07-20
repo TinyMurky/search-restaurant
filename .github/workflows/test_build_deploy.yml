@@ -1,0 +1,68 @@
+# https://bwoff.medium.com/go-ci-cd-with-github-actions-a29f7744c18f
+# .github/workflows/ci.yml
+name: Go CI
+
+# ❶ 觸發條件要寫在 root level，而不是 job 裡
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test_build:
+    runs-on: ubuntu-latest
+
+    # ❷ 建議開啟 read-only 權限即可
+    permissions:
+      contents: read
+
+    steps:
+      # 1. 取回程式碼
+      - uses: actions/checkout@v4
+
+      # 2. 安裝 Go，並開啟官方 cache
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"   # 記得用字串
+          cache: true            # 自動 cache GOMODCACHE
+
+      # 3. 安裝 linters（golint 已棄用，改用 golangci-lint）
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+      # 4. 執行 linters
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
+
+      # 5. 格式檢查（只列出差異，不自動修改）
+      - name: Run gofmt
+        run: |
+          diff=$(gofmt -s -l .)
+          if [ -n "$diff" ]; then
+            echo "gofmt found files that need formatting:" >&2
+            echo "$diff" >&2
+            exit 1
+          fi
+
+      # 6. 靜態分析
+      - name: Run go vet
+        run: go vet ./...
+
+      # 7. 單元測試（含 coverage）
+      - name: Test with coverage
+        run: go test -v -coverprofile=coverage.out ./...
+
+      # 8. 編譯（確定能成功 build）
+      - name: Build
+        run: go build ./...
+
+      # 9. 上傳 coverage 到 Codecov（可選）
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.out
+          fail_ci_if_error: true
